@@ -1,0 +1,14 @@
+version: "3.7"
+services:
+  db:
+    networks:
+      - argent_network
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: argent
+    ports:
+      - "5432:5432"
+networks:
+  argent_network:
+    name: argent_network

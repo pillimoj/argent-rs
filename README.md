@@ -1,14 +1,23 @@
 # Argent backend built with Rust
 
-## Running
+## Run it
 
-- Database: `docker compose up -d db`
-- Debug `cargo run`
-- Release `make rundocker`
+### Database needs to run
 
-## Deploy
+`docker compose up -d db`
 
-- `make deploy`
+### Run debug version
+
+`cargo run`
+
+### Run release buld
+
+`make rundocker`
+The container runs similarly to the way it runs in production with the a few minor differences (CORS, auth cookie settings)
+
+## Deploying
+
+`make deploy` will build a container ready for release
 
 ## TODO
 

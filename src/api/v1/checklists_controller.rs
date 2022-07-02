@@ -1,7 +1,7 @@
 use crate::{
     api::{
         auth::user_guard::AuthenticatedUser,
-        helpers::{parse_uuid_path_param, ApiResultFrom, ArgentApiResult, ArgentResult, NewData},
+        helpers::{parse_uuid, ApiResultFrom, ArgentApiResult, ArgentResult, NewData, OkData},
     },
     data::{
         checklists::{
@@ -13,9 +13,9 @@ use crate::{
         },
         users::models::User,
     },
-    error::ArgentError,
+    error::{ArgentError, SimpleMessage},
 };
-use rocket::{delete, get, post, routes, serde::json::Json, Route};
+use rocket::{delete, get, http::Status, post, routes, serde::json::Json, Route};
 use uuid::Uuid;
 
 #[get("/checklists")]
@@ -23,7 +23,7 @@ async fn get_checklists(
     mut checklists_store: ChecklistStore,
     user: AuthenticatedUser,
 ) -> ArgentApiResult<Vec<Checklist>> {
-    let lists = checklists_store.get_checklists_for_user(user.get()).await;
+    let lists = checklists_store.get_checklists_for_user(user.get()).await?;
     ArgentApiResult::new(lists)
 }
 
@@ -32,12 +32,12 @@ async fn create_checklist(
     mut checklists_store: ChecklistStore,
     user: AuthenticatedUser,
     checklist_request: Json<ChecklistRequest>,
-) -> ArgentApiResult<()> {
+) -> ArgentApiResult<SimpleMessage> {
     let checklist = Checklist::from_request(checklist_request.0);
     checklists_store
         .create_checklist(checklist, user.get())
-        .await;
-    ArgentApiResult::new(())
+        .await?;
+    ArgentApiResult::new_ok()
 }
 
 #[get("/checklists/<id>/items")]
@@ -46,7 +46,7 @@ async fn get_checklist_items(
     id: String,
     user: AuthenticatedUser,
 ) -> ArgentApiResult<Vec<ChecklistItem>> {
-    let id = parse_uuid_path_param(&id)?;
+    let id = parse_uuid(&id, Status::NotFound)?;
     check_access(&mut checklists_store, id, user.get()).await?;
     checklists_store.get_checklist_items(id).await.api()
 }
@@ -56,11 +56,11 @@ async fn create_checklistitem(
     mut checklists_store: ChecklistStore,
     checklistitem_request: Json<ChecklistItemRequest>,
     user: AuthenticatedUser,
-) -> ArgentApiResult<()> {
+) -> ArgentApiResult<SimpleMessage> {
     let item = checklistitem_request.into_inner().get()?;
     check_access(&mut checklists_store, item.checklist, user.get()).await?;
-    checklists_store.add_item(item).await;
-    ArgentApiResult::new(())
+    checklists_store.add_item(item).await?;
+    ArgentApiResult::new_ok()
 }
 
 #[post("/checklistitems/<id>/done")]
@@ -68,10 +68,10 @@ async fn set_item_done(
     mut checklists_store: ChecklistStore,
     id: String,
     _user: AuthenticatedUser,
-) -> ArgentApiResult<()> {
-    let id = parse_uuid_path_param(&id)?;
-    checklists_store.set_item_done(id, true).await;
-    ArgentApiResult::new(())
+) -> ArgentApiResult<SimpleMessage> {
+    let id = parse_uuid(&id, Status::NotFound)?;
+    checklists_store.set_item_done(id, true).await?;
+    ArgentApiResult::new_ok()
 }
 
 #[post("/checklistitems/<id>/not-done")]
@@ -79,10 +79,10 @@ async fn set_item_not_done(
     mut checklists_store: ChecklistStore,
     id: String,
     _user: AuthenticatedUser,
-) -> ArgentApiResult<()> {
-    let id = parse_uuid_path_param(&id)?;
-    checklists_store.set_item_done(id, false).await;
-    ArgentApiResult::new(())
+) -> ArgentApiResult<SimpleMessage> {
+    let id = parse_uuid(&id, Status::NotFound)?;
+    checklists_store.set_item_done(id, false).await?;
+    ArgentApiResult::new_ok()
 }
 
 #[delete("/checklists/<id>")]
@@ -90,11 +90,11 @@ async fn delete_checklist(
     mut checklists_store: ChecklistStore,
     id: String,
     user: AuthenticatedUser,
-) -> ArgentApiResult<()> {
-    let id = parse_uuid_path_param(&id)?;
+) -> ArgentApiResult<SimpleMessage> {
+    let id = parse_uuid(&id, Status::NotFound)?;
     check_owner(&mut checklists_store, id, user.get()).await?;
-    checklists_store.delete_checklist(id).await;
-    ArgentApiResult::new(())
+    checklists_store.delete_checklist(id).await?;
+    ArgentApiResult::new_ok()
 }
 
 #[get("/checklists/<id>")]
@@ -103,7 +103,7 @@ async fn get_checklist(
     id: String,
     user: AuthenticatedUser,
 ) -> ArgentApiResult<Checklist> {
-    let id = parse_uuid_path_param(&id)?;
+    let id = parse_uuid(&id, Status::NotFound)?;
     check_access(&mut checklists_store, id, user.get()).await?;
     checklists_store.get_checklist_by_id(id).await.api()
 }
@@ -113,11 +113,11 @@ async fn clear_done(
     mut checklists_store: ChecklistStore,
     id: String,
     user: AuthenticatedUser,
-) -> ArgentApiResult<()> {
-    let id = parse_uuid_path_param(&id)?;
+) -> ArgentApiResult<SimpleMessage> {
+    let id = parse_uuid(&id, Status::NotFound)?;
     check_access(&mut checklists_store, id, user.get()).await?;
-    checklists_store.clear_done(id).await;
-    ArgentApiResult::new(())
+    checklists_store.clear_done(id).await?;
+    ArgentApiResult::new_ok()
 }
 
 #[post("/checklists/<id>/share", data = "<share_req>")]
@@ -126,15 +126,15 @@ async fn share(
     id: String,
     user: AuthenticatedUser,
     share_req: Json<ShareRequest>,
-) -> ArgentApiResult<()> {
-    let checklist_id = parse_uuid_path_param(&id)?;
+) -> ArgentApiResult<SimpleMessage> {
+    let checklist_id = parse_uuid(&id, Status::NotFound)?;
     let share_req = share_req.into_inner();
-    let user_id = Uuid::parse_str(&share_req.user_id).map_err(|_| ArgentError::bad_request())?;
+    let user_id = parse_uuid(&share_req.user_id, Status::BadRequest)?;
     check_owner(&mut checklists_store, checklist_id, user.get()).await?;
     checklists_store
         .add_user_access(checklist_id, user_id, share_req.access_type)
-        .await;
-    ArgentApiResult::new(())
+        .await?;
+    ArgentApiResult::new_ok()
 }
 
 #[post("/checklists/<id>/unshare/<user_id>")]
@@ -143,13 +143,13 @@ async fn un_share(
     id: String,
     user_id: String,
     user: AuthenticatedUser,
-) -> ArgentApiResult<()> {
-    let checklist_id = parse_uuid_path_param(&id)?;
-    let user_id = parse_uuid_path_param(&user_id)?;
+) -> ArgentApiResult<SimpleMessage> {
+    let checklist_id = parse_uuid(&id, Status::NotFound)?;
+    let user_id = parse_uuid(&user_id, Status::NotFound)?;
     check_owner(&mut checklists_store, checklist_id, user.get()).await?;
     let users = checklists_store
         .get_users_access_for_checklist(checklist_id)
-        .await;
+        .await?;
     let owners = users
         .iter()
         .filter(|user_access| user_access.access_type == AccessType::Owner)
@@ -166,8 +166,8 @@ async fn un_share(
     // }
     checklists_store
         .remove_useraccess(checklist_id, user_id)
-        .await;
-    ArgentApiResult::new(())
+        .await?;
+    ArgentApiResult::new_ok()
 }
 
 #[get("/checklists/<id>/users")]
@@ -176,11 +176,11 @@ async fn get_users_for_checklist(
     id: String,
     user: AuthenticatedUser,
 ) -> ArgentApiResult<Vec<UserAccess>> {
-    let checklist_id = parse_uuid_path_param(&id)?;
+    let checklist_id = parse_uuid(&id, Status::NotFound)?;
     check_access(&mut checklists_store, checklist_id, user.get()).await?;
     let user_accesses = checklists_store
         .get_users_access_for_checklist(checklist_id)
-        .await;
+        .await?;
     ArgentApiResult::new(user_accesses)
 }
 
@@ -189,9 +189,9 @@ async fn check_access(
     checklist_id: Uuid,
     user: User,
 ) -> ArgentResult<()> {
-    match checklists_store.get_access_type(checklist_id, user).await {
-        None => Err(ArgentError::forbidden()),
-        Some(_) => Ok(()),
+    match checklists_store.get_access_type(checklist_id, user).await? {
+        AccessType::Owner | AccessType::Editor => Ok(()),
+        AccessType::None => Err(ArgentError::forbidden()),
     }
 }
 
@@ -200,9 +200,9 @@ async fn check_owner(
     checklist_id: Uuid,
     user: User,
 ) -> ArgentResult<()> {
-    match checklist_store.get_access_type(checklist_id, user).await {
-        None | Some(AccessType::Editor) => Err(ArgentError::forbidden()),
-        Some(AccessType::Owner) => Ok(()),
+    match checklist_store.get_access_type(checklist_id, user).await? {
+        AccessType::Owner => Ok(()),
+        _ => Err(ArgentError::forbidden()),
     }
 }
 

@@ -10,7 +10,6 @@ use crate::{
     },
     config::AuthenticationConfig,
     data::users::{models::User, store::UsersStore},
-    error::ArgentError,
 };
 
 #[get("/login")]
@@ -20,8 +19,7 @@ async fn login(
     cookies: &CookieJar<'_>,
     auth_config: &State<AuthenticationConfig>,
 ) -> ArgentApiResult<User> {
-    let user = users_store.get_user_for_email(&email.0).await;
-    let user = user.ok_or(ArgentError::unauthorized_msg("No user found"))?;
+    let user = users_store.get_user_for_email(&email.0).await?;
     let auth_cookie = create_auth_cookie(&auth_config, &user);
     cookies.add(auth_cookie);
     ArgentApiResult::new(user)

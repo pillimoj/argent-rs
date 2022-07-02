@@ -5,17 +5,16 @@ use rocket_db_pools::Connection;
 use sqlx::{query, query_as};
 use uuid::Uuid;
 
-use crate::api::helpers::ArgentResult;
 use crate::data::users::models::User;
 use crate::data::ArgentDB;
-use crate::error::ArgentError;
+use crate::{api::helpers::ArgentResult, error::ArgentError};
 
 pub struct UsersStore {
     db: Connection<ArgentDB>,
 }
 
 impl UsersStore {
-    pub async fn get_user_for_email(&mut self, email: &str) -> Option<User> {
+    pub async fn get_user_for_email(&mut self, email: &str) -> Result<User, ArgentError> {
         let user = query_as(
             "SELECT
                     id,
@@ -27,12 +26,11 @@ impl UsersStore {
         )
         .bind(email)
         .fetch_one(&mut *self.db)
-        .await
-        .unwrap();
-        Some(user)
+        .await?;
+        Ok(user)
     }
 
-    pub async fn get_user(&mut self, id: Uuid) -> Option<User> {
+    pub async fn get_user(&mut self, id: Uuid) -> Result<User, ArgentError> {
         let user = query_as(
             "SELECT
                     id,
@@ -44,13 +42,12 @@ impl UsersStore {
         )
         .bind(id)
         .fetch_one(&mut *self.db)
-        .await
-        .unwrap();
-        Some(user)
+        .await?;
+        Ok(user)
     }
 
-    pub async fn get_all_users(&mut self) -> Vec<User> {
-        query_as(
+    pub async fn get_all_users(&mut self) -> Result<Vec<User>, ArgentError> {
+        let users = query_as(
             "SELECT
                 id,
                 name,
@@ -59,8 +56,8 @@ impl UsersStore {
             FROM argent_users",
         )
         .fetch_all(&mut *self.db)
-        .await
-        .unwrap()
+        .await?;
+        Ok(users)
     }
 
     pub async fn add_user(&mut self, user: User) -> ArgentResult<()> {
@@ -79,8 +76,8 @@ impl UsersStore {
         .bind(user.role)
         .execute(&mut *self.db)
         .await
-        .map(|_| ())
-        .map_err(|err| ArgentError::from_error(&err))
+        .map(|_| ())?;
+        Ok(())
     }
 
     pub async fn delete_user(&mut self, user_id: Uuid) -> ArgentResult<()> {
@@ -93,8 +90,8 @@ impl UsersStore {
         .bind(user_id)
         .execute(&mut *self.db)
         .await
-        .map(|_| ())
-        .map_err(|err| ArgentError::from_error(&err))
+        .map(|_| ())?;
+        Ok(())
     }
 }
 

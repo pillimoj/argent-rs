@@ -1,4 +1,4 @@
-use rocket::{get, routes, serde::json::Json, Route};
+use rocket::{get, routes, Route};
 
 use crate::{
     api::{
@@ -20,14 +20,14 @@ fn me(user: AuthenticatedUser) -> ArgentApiResult<User> {
 async fn get_all_for_sharing(
     _user: AuthenticatedUser,
     mut users_store: UsersStore,
-) -> Json<Vec<UserForSharing>> {
-    users_store
+) -> ArgentApiResult<Vec<UserForSharing>> {
+    let users = users_store
         .get_all_users()
-        .await
+        .await?
         .into_iter()
         .map(UserForSharing::from_user)
-        .collect::<Vec<_>>()
-        .into()
+        .collect::<Vec<_>>();
+    ArgentApiResult::new(users)
 }
 
 pub fn routes() -> Vec<Route> {

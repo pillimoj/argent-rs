@@ -1,8 +1,8 @@
-use rocket::{response::Responder, serde::json::Json};
+use rocket::{http::Status, response::Responder, serde::json::Json};
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::error::ArgentError;
+use crate::error::{ArgentError, SimpleMessage};
 
 pub type ArgentApiResult<T> = Result<Data<T>, ArgentError>;
 pub trait NewData<T: Serialize> {
@@ -11,6 +11,15 @@ pub trait NewData<T: Serialize> {
 impl<T: Serialize> NewData<T> for ArgentApiResult<T> {
     fn new(data: T) -> Self {
         Ok(Data::D(data))
+    }
+}
+
+pub trait OkData {
+    fn new_ok() -> Self;
+}
+impl OkData for ArgentApiResult<SimpleMessage> {
+    fn new_ok() -> Self {
+        ArgentApiResult::new(SimpleMessage::ok())
     }
 }
 
@@ -28,8 +37,8 @@ pub enum Data<T: Serialize> {
     Empty,
 }
 
-pub fn parse_uuid_path_param(string_value: &str) -> ArgentResult<Uuid> {
-    Uuid::parse_str(string_value).map_err(|_| ArgentError::not_found_msg("malformed uuid"))
+pub fn parse_uuid(string_value: &str, invalid_result: Status) -> ArgentResult<Uuid> {
+    Uuid::parse_str(string_value).map_err(|_| ArgentError::from_status(invalid_result))
 }
 
 impl<'r, 'o: 'r, T: Serialize> Responder<'r, 'o> for Data<T> {

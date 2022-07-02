@@ -3,14 +3,14 @@ use rocket::serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Type, Clone)]
+#[derive(Serialize, Deserialize, Type, Clone, Debug)]
 #[sqlx(type_name = "TEXT")]
 pub enum UserRole {
     Admin,
     User,
 }
 
-#[derive(Serialize, Deserialize, FromRow, Clone)]
+#[derive(Serialize, Deserialize, FromRow, Clone, Debug)]
 pub struct User {
     pub id: Uuid,
     pub name: String,

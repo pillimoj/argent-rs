@@ -34,25 +34,22 @@ impl ChecklistStore {
         )
         .bind(checklist)
         .fetch_all(&mut *self.db)
-        .await
-        .map(|rows| {
-            rows.iter()
-                .map(ChecklistItem::from_row)
-                .collect::<Vec<ChecklistItem>>()
-        })
-        .map_err(|err| ArgentError::from_error(&err))
+        .await?
+        .iter()
+        .map(ChecklistItem::from_row)
+        .collect()
     }
 
     pub async fn get_checklists(&mut self) -> ArgentResult<Vec<Checklist>> {
-        sqlx::query_as(
+        let list = sqlx::query_as(
             "SELECT
                     id,
                     name,
                 FROM checklists",
         )
         .fetch_all(&mut *self.db)
-        .await
-        .map_err(|err| ArgentError::from_error(&err))
+        .await?;
+        Ok(list)
     }
 
     pub async fn get_checklist_by_id(&mut self, id: Uuid) -> ArgentResult<Checklist> {
@@ -65,16 +62,18 @@ impl ChecklistStore {
         )
         .bind(id)
         .fetch_optional(&mut *self.db)
-        .await
-        .map_err(|err| ArgentError::from_error(&err))?;
+        .await?;
         match result {
             Some(checklist) => Ok(checklist),
             None => Err(ArgentError::not_found()),
         }
     }
 
-    pub async fn get_checklists_for_user(&mut self, user: User) -> Vec<Checklist> {
-        sqlx::query_as(
+    pub async fn get_checklists_for_user(
+        &mut self,
+        user: User,
+    ) -> Result<Vec<Checklist>, ArgentError> {
+        let list = sqlx::query_as(
             "SELECT id, name
                 FROM checklists c
                 LEFT JOIN checklist_access ca
@@ -83,12 +82,16 @@ impl ChecklistStore {
         )
         .bind(user.id)
         .fetch_all(&mut *self.db)
-        .await
-        .unwrap()
+        .await?;
+        Ok(list)
     }
 
-    pub async fn create_checklist(&mut self, checklist: Checklist, user: User) {
-        let mut tx = self.db.begin().await.unwrap();
+    pub async fn create_checklist(
+        &mut self,
+        checklist: Checklist,
+        user: User,
+    ) -> Result<(), ArgentError> {
+        let mut tx = self.db.begin().await?;
         sqlx::query(
             "INSERT INTO checklists (
                     id,
@@ -99,8 +102,7 @@ impl ChecklistStore {
         .bind(checklist.id)
         .bind(checklist.name)
         .execute(&mut *tx)
-        .await
-        .unwrap();
+        .await?;
 
         sqlx::query(
             "INSERT INTO checklist_access (
@@ -114,10 +116,10 @@ impl ChecklistStore {
         .bind(user.id)
         .bind(AccessType::Owner)
         .execute(&mut *tx)
-        .await
-        .unwrap();
+        .await?;
 
-        tx.commit().await.unwrap();
+        tx.commit().await?;
+        Ok(())
     }
 
     pub async fn add_user_access(
@@ -125,7 +127,7 @@ impl ChecklistStore {
         checklist_id: Uuid,
         user_id: Uuid,
         access_type: AccessType,
-    ) {
+    ) -> Result<(), ArgentError> {
         sqlx::query(
             "INSERT INTO checklist_access (
                 checklist,
@@ -138,12 +140,12 @@ impl ChecklistStore {
         .bind(user_id)
         .bind(access_type)
         .execute(&mut *self.db)
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 
-    pub async fn delete_checklist(&mut self, checklist: Uuid) {
-        let mut tx = self.db.begin().await.unwrap();
+    pub async fn delete_checklist(&mut self, checklist: Uuid) -> Result<(), ArgentError> {
+        let mut tx = self.db.begin().await?;
 
         sqlx::query(
             "DELETE FROM checklistitems
@@ -151,8 +153,7 @@ impl ChecklistStore {
         )
         .bind(checklist)
         .execute(&mut *tx)
-        .await
-        .unwrap();
+        .await?;
 
         sqlx::query(
             "DELETE FROM checklists
@@ -160,13 +161,13 @@ impl ChecklistStore {
         )
         .bind(checklist)
         .execute(&mut *tx)
-        .await
-        .unwrap();
+        .await?;
 
-        tx.commit().await.unwrap()
+        tx.commit().await?;
+        Ok(())
     }
 
-    pub async fn add_item(&mut self, item: ChecklistItem) {
+    pub async fn add_item(&mut self, item: ChecklistItem) -> Result<(), ArgentError> {
         sqlx::query(
             "INSERT INTO checklistitems (
                 id,
@@ -183,11 +184,11 @@ impl ChecklistStore {
         .bind(&item.checklist)
         .bind(item.created_at_primitive_datetime())
         .execute(&mut *self.db)
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 
-    pub async fn set_item_done(&mut self, item_id: Uuid, done: bool) {
+    pub async fn set_item_done(&mut self, item_id: Uuid, done: bool) -> Result<(), ArgentError> {
         sqlx::query(
             " UPDATE checklistitems
             SET done = $1
@@ -196,11 +197,11 @@ impl ChecklistStore {
         .bind(done)
         .bind(item_id)
         .execute(&mut *self.db)
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 
-    pub async fn clear_done(&mut self, checklist: Uuid) {
+    pub async fn clear_done(&mut self, checklist: Uuid) -> Result<(), ArgentError> {
         sqlx::query(
             "DELETE FROM checklistitems
                 WHERE checklist = $1
@@ -208,11 +209,15 @@ impl ChecklistStore {
         )
         .bind(checklist)
         .execute(&mut *self.db)
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 
-    pub async fn get_access_type(&mut self, checklist: Uuid, user: User) -> Option<AccessType> {
+    pub async fn get_access_type(
+        &mut self,
+        checklist: Uuid,
+        user: User,
+    ) -> Result<AccessType, ArgentError> {
         let row = sqlx::query(
             "SELECT access_type
                 FROM checklist_access
@@ -222,13 +227,20 @@ impl ChecklistStore {
         .bind(checklist)
         .bind(user.id)
         .fetch_optional(&mut *self.db)
-        .await
-        .unwrap();
+        .await?;
 
-        row.map(|row| row.try_get("access_type").unwrap())
+        let access_type = match row {
+            Some(row) => row.try_get("access_type")?,
+            None => AccessType::None,
+        };
+        Ok(access_type)
     }
 
-    pub async fn remove_useraccess(&mut self, checklist: Uuid, user_id: Uuid) {
+    pub async fn remove_useraccess(
+        &mut self,
+        checklist: Uuid,
+        user_id: Uuid,
+    ) -> Result<(), ArgentError> {
         sqlx::query(
             "DELETE FROM checklist_access
             WHERE checklist = $1
@@ -237,12 +249,15 @@ impl ChecklistStore {
         .bind(checklist)
         .bind(user_id)
         .execute(&mut *self.db)
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 
-    pub async fn get_users_access_for_checklist(&mut self, checklist: Uuid) -> Vec<UserAccess> {
-        sqlx::query_as(
+    pub async fn get_users_access_for_checklist(
+        &mut self,
+        checklist: Uuid,
+    ) -> Result<Vec<UserAccess>, ArgentError> {
+        let user_accesses = sqlx::query_as(
             "SELECT
                 id,
                 name,
@@ -254,8 +269,8 @@ impl ChecklistStore {
         )
         .bind(checklist)
         .fetch_all(&mut *self.db)
-        .await
-        .unwrap()
+        .await?;
+        Ok(user_accesses)
     }
 }
 

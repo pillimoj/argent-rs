@@ -20,6 +20,7 @@ fn get_user_from_cookie(
     decode_token(token, auth_config)
 }
 
+#[derive(Debug)]
 pub struct AuthenticatedUser(User);
 impl AuthenticatedUser {
     pub fn get(self) -> User {
@@ -40,7 +41,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
 
         match user {
             Ok(user) => Outcome::Success(AuthenticatedUser(user)),
-            Err(error) => Outcome::Failure((error.status, error)),
+            Err(error) => Outcome::Failure((error.status_code(), error)),
         }
     }
 }

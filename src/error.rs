@@ -1,27 +1,21 @@
-pub type BoxResult<T> = Result<T, Box<dyn Error>>;
-
-use std::error::Error;
-use std::fmt;
-
-use rocket::http::{ContentType, Status};
-use rocket::response::{self, Responder};
-use rocket::serde::json::Json;
-use rocket::Request;
+use rocket::{
+    http::{ContentType, Status},
+    response::{self, Responder},
+    serde::json::Json,
+    Request,
+};
 use serde::Serialize;
-
-#[derive(Debug)]
-pub struct ArgentError {
-    pub msg: String,
-    pub status: Status,
-}
+use thiserror::Error;
 
 #[derive(Serialize, Debug)]
 pub struct SimpleMessage {
     pub msg: String,
 }
 impl SimpleMessage {
-    pub fn new(msg: String) -> Self {
-        Self { msg }
+    pub fn new(msg: &str) -> Self {
+        Self {
+            msg: msg.to_string(),
+        }
     }
     pub fn ok() -> Self {
         Self {
@@ -30,9 +24,47 @@ impl SimpleMessage {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum ArgentError {
+    #[error(transparent)]
+    Jwt(#[from] jsonwebtoken::errors::Error),
+    #[error("{msg}")]
+    Api { status: Status, msg: String },
+    #[error(transparent)]
+    Server(#[from] anyhow::Error),
+    #[error(transparent)]
+    ExternalServer(#[from] reqwest::Error),
+    #[error(transparent)]
+    DataBase(#[from] sqlx::Error),
+}
+
 impl ArgentError {
+    fn for_api(&self) -> (Status, SimpleMessage) {
+        (self.status_code(), self.simple_message())
+    }
+
+    pub fn status_code(&self) -> Status {
+        match self {
+            Self::Api { status, .. } => *status,
+            Self::Jwt(_) => Status::Unauthorized,
+            Self::Server(_) | Self::ExternalServer(_) | Self::DataBase(_) => {
+                Status::InternalServerError
+            }
+        }
+    }
+
+    fn simple_message(&self) -> SimpleMessage {
+        match self {
+            Self::Api { msg, .. } => SimpleMessage::new(msg),
+            Self::Jwt(_) => SimpleMessage::new("Unauthorized"),
+            Self::Server(_) | Self::ExternalServer(_) | Self::DataBase(_) => {
+                SimpleMessage::new("Internal Server Error")
+            }
+        }
+    }
+
     pub fn new(msg: &str, status: Status) -> Self {
-        Self {
+        Self::Api {
             msg: msg.to_string(),
             status,
         }
@@ -48,6 +80,10 @@ impl ArgentError {
 
     pub fn forbidden() -> Self {
         Self::new("Forbidden", Status::Forbidden)
+    }
+
+    pub fn unauthorized() -> Self {
+        Self::new("Unauthorized", Status::Unauthorized)
     }
 
     pub fn server_error() -> Self {
@@ -66,46 +102,38 @@ impl ArgentError {
         Self::new(msg, Status::Forbidden)
     }
 
+    pub fn unauthorized_msg(msg: &str) -> Self {
+        Self::new(msg, Status::Unauthorized)
+    }
     pub fn server_error_msg(msg: &str) -> Self {
         Self::new(msg, Status::NotFound)
     }
 
-    pub fn unauthorized() -> Self {
-        Self::new("Unauthorized", Status::Unauthorized)
-    }
-
-    pub fn unauthorized_msg(msg: &str) -> Self {
-        Self::new(msg, Status::Unauthorized)
-    }
-
-    pub fn from_error(err: &dyn Error) -> Self {
-        println!("{}", err);
-        Self::server_error()
-    }
-}
-
-impl fmt::Display for ArgentError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} - {}", self.status, self.msg)
-    }
-}
-
-impl Error for ArgentError {
-    fn description(&self) -> &str {
-        &self.msg
-    }
-}
-
-impl From<(Status, ArgentError)> for ArgentError {
-    fn from((_, error): (Status, ArgentError)) -> Self {
-        error
+    pub fn from_status(status: Status) -> Self {
+        match status.class() {
+            rocket::http::StatusClass::ClientError => match status.code {
+                400 => Self::bad_request(),
+                401 => Self::unauthorized(),
+                403 => Self::forbidden(),
+                404 => Self::not_found(),
+                _ => panic!(
+                    "Creating ArgentError from Status {} not implemented",
+                    status.code
+                ),
+            },
+            rocket::http::StatusClass::ServerError | rocket::http::StatusClass::Unknown => {
+                Self::server_error()
+            }
+            _ => panic!("Creating error from non error status"),
+        }
     }
 }
 
 impl<'r, 'o: 'r> Responder<'r, 'o> for ArgentError {
     fn respond_to(self, req: &Request) -> response::Result<'o> {
-        response::Response::build_from(Json(SimpleMessage::new(self.msg)).respond_to(&req).unwrap())
-            .status(self.status)
+        let (status, msg) = self.for_api();
+        response::Response::build_from(Json(msg).respond_to(&req)?)
+            .status(status)
             .header(ContentType::JSON)
             .ok()
     }

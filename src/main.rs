@@ -15,10 +15,10 @@ pub mod config;
 pub mod cors;
 pub mod error;
 
-use crate::{
-    api::{auth::jwk::JWKSStore, v1::ApiV1Routes},
-    data::ArgentDB,
-};
+use std::fs;
+
+use crate::{api::v1::ApiV1Routes, data::ArgentDB};
+use api::auth::jwk::Jwks;
 use config::AuthenticationConfig;
 use cors::CORS;
 use error::SimpleMessage;
@@ -44,7 +44,7 @@ async fn ping() -> Json<SimpleMessage> {
 async fn rocket() -> _ {
     rocket::build()
         .manage(
-            JWKSStore::google()
+            Jwks::new()
                 .await
                 .expect("Could not start google Jwt verifier"),
         )

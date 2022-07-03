@@ -5,7 +5,9 @@ use rocket::{
     Request,
 };
 
-use crate::{api::auth::jwk::JWKSStore, error::ArgentError};
+use crate::error::ArgentError;
+
+use super::jwk::Jwks;
 
 struct GoogleToken<'r>(&'r str);
 
@@ -44,18 +46,15 @@ impl<'r> FromRequest<'r> for AuthenticatedGoogleMail {
     ) -> Outcome<AuthenticatedGoogleMail, (Status, Self::Error), ()> {
         let token = request.guard::<GoogleToken>().await;
         let token = try_outcome!(token);
-        let store = request
+        let jwks = request
             .rocket()
-            .state::<JWKSStore>()
+            .state::<Jwks>()
             .expect("Could not access JWKSStore");
-        match store.verify_token(token.0).await {
-            Ok(verified_token) => Outcome::Success(Self(verified_token)),
+        match jwks.validate_token(token.0).await {
+            Ok(verified_email) => Outcome::Success(Self(verified_email)),
             Err(error) => {
                 println!("Could not verify token - {}", error);
-                Outcome::Failure((
-                    Status::Unauthorized,
-                    ArgentError::new("Missing authorization bearer token", Status::BadRequest),
-                ))
+                Outcome::Failure((Status::Unauthorized, ArgentError::unauthorized()))
             }
         }
     }

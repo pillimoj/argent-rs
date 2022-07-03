@@ -1,6 +1,0 @@
-[env]
-ROCKET_DATABASES = '{argent={url="postgres://argent:password@localhost/argent" }}'
-ARGENT_AUTH = '{ "jwtKey": "supersecret", "secureCookie": false, "cookieName": "argent" }'
-ROCKET_PORT = '8008'
-ARGENT_DEBUG = "true"
-ROCKET_LOG_LEVEL = "normal"

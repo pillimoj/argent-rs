@@ -1,39 +1,99 @@
-use jwks_client::keyset::KeyStore;
-use rocket::http::Status;
+use std::{collections::HashMap, sync::Arc};
+
+use jsonwebtoken::{DecodingKey, Validation};
+use rocket::tokio::sync::RwLock;
+use serde::Deserialize;
 
 use crate::error::ArgentError;
 
-pub struct JWKSStore {
-    store: KeyStore,
+const CERT_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
+
+#[derive(Deserialize)]
+struct GoogleToken {
+    email: String,
 }
 
-impl JWKSStore {
-    pub async fn from_url(url: &str) -> Result<JWKSStore, ArgentError> {
-        let store = KeyStore::new_from(url.to_string()).await.unwrap();
-        Ok(JWKSStore { store })
+#[derive(Clone, Deserialize)]
+struct Jwk {
+    pub kid: String,
+    pub e: String,
+    pub n: String,
+}
+
+#[derive(Deserialize)]
+struct JwkResponse {
+    pub keys: Vec<Jwk>,
+}
+
+pub struct Jwks {
+    jwk_map: Arc<RwLock<HashMap<String, Jwk>>>,
+}
+
+impl Jwks {
+    pub async fn new() -> Result<Self, ArgentError> {
+        let new = Self {
+            jwk_map: Arc::new(RwLock::new(HashMap::new())),
+        };
+        new.refresh_jwks().await?;
+        Ok(new)
     }
 
-    pub async fn google() -> Result<JWKSStore, ArgentError> {
-        Self::from_url("https://www.googleapis.com/oauth2/v3/certs").await
+    fn validate_with_jwk(jwk: Jwk, token: &str) -> Result<String, ArgentError> {
+        let decoded = jsonwebtoken::decode::<GoogleToken>(
+            token,
+            &DecodingKey::from_rsa_components(&jwk.n, &jwk.e)?,
+            &Validation::default(),
+        )?;
+        Ok(decoded.claims.email)
     }
 
-    pub async fn verify_token(&self, token: &str) -> Result<String, ArgentError> {
-        let jwt = self.store.verify(token).map_err(Self::conv_client_err)?;
-        let email = jwt
-            .payload()
-            .get_str("email")
-            .map(str::to_string)
-            .ok_or_else(|| ArgentError::new("token missing email", Status::Unauthorized));
-        email
+    async fn get_current_keys() -> Result<HashMap<String, Jwk>, ArgentError> {
+        Ok(reqwest::get(CERT_URL)
+            .await?
+            .json::<JwkResponse>()
+            .await?
+            .keys
+            .iter()
+            .map(|key| (key.kid.clone(), key.to_owned()))
+            .collect::<HashMap<_, _>>())
     }
 
-    fn conv_client_err(cr: jwks_client::error::Error) -> ArgentError {
-        ArgentError::new(
-            &format!("jwks_client - {:?} - {}", cr.typ, cr.msg),
-            Status::Unauthorized,
-        )
+    async fn refresh_jwks(&self) -> Result<(), ArgentError> {
+        let mut jwk_map = self.jwk_map.write().await;
+        let current_keys = &Self::get_current_keys().await;
+        match current_keys {
+            Ok(current_keys) => {
+                jwk_map.clone_from(current_keys);
+                Ok(())
+            }
+            Err(err) => {
+                drop(jwk_map);
+                println!("{}", err);
+                Err(ArgentError::server_error())
+            }
+        }
+    }
+
+    pub async fn validate_token(&self, token: &str) -> Result<String, ArgentError> {
+        // get key id
+        let header = jsonwebtoken::decode_header(token)?;
+        let kid = header.kid.ok_or_else(|| ArgentError::unauthorized())?;
+        // Try using cache
+        let jwk = match self.jwk_map.read().await.get(&kid).cloned() {
+            Some(jwk) => jwk,
+            None => {
+                self.refresh_jwks().await?;
+                self.jwk_map
+                    .read()
+                    .await
+                    .get(token)
+                    .cloned()
+                    .ok_or_else(|| ArgentError::unauthorized())?
+            }
+        };
+        Self::validate_with_jwk(jwk, token)
     }
 }
 
-unsafe impl Send for JWKSStore {}
-unsafe impl Sync for JWKSStore {}
+unsafe impl Send for Jwks {}
+unsafe impl Sync for Jwks {}

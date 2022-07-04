@@ -11,7 +11,6 @@ WORKDIR /argent
 # copy over your manifests
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
-COPY ./Rocket.toml ./Rocket.toml
 
 # this build step will cache your dependencies
 RUN cargo build --release

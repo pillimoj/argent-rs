@@ -39,11 +39,13 @@ impl Jwks {
     }
 
     fn validate_with_jwk(jwk: Jwk, token: &str) -> Result<String, ArgentError> {
+        let val = Validation::new(jsonwebtoken::Algorithm::RS256);
         let decoded = jsonwebtoken::decode::<GoogleToken>(
             token,
             &DecodingKey::from_rsa_components(&jwk.n, &jwk.e)?,
-            &Validation::default(),
-        )?;
+            &val,
+        )
+        .unwrap();
         Ok(decoded.claims.email)
     }
 

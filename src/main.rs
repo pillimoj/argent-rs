@@ -13,22 +13,20 @@ pub mod api {
 }
 pub mod config;
 pub mod cors;
+pub mod debugging;
 pub mod error;
-
-use std::fs;
 
 use crate::{api::v1::ApiV1Routes, data::ArgentDB};
 use api::auth::jwk::Jwks;
 use config::AuthenticationConfig;
 use cors::CORS;
+use debugging::load_debug_env;
 use error::SimpleMessage;
 use rocket::{get, launch, routes, serde::json::Json};
 use rocket_db_pools::Database;
 
 //#[macro_use]
 extern crate rocket;
-
-pub const ARGENT_DEBUG: bool = cfg!(debug_assertions);
 
 #[get("/health-check")]
 async fn health_check() -> Json<SimpleMessage> {
@@ -42,6 +40,7 @@ async fn ping() -> Json<SimpleMessage> {
 
 #[launch]
 async fn rocket() -> _ {
+    load_debug_env();
     rocket::build()
         .manage(
             Jwks::new()

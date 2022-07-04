@@ -12,6 +12,7 @@ pub struct AuthenticationConfig {
 impl AuthenticationConfig {
     pub fn from_env() -> Self {
         let as_string = std::env::var("ARGENT_AUTH").unwrap();
+        println!("{}", as_string);
         serde_json::from_str(&as_string).unwrap()
     }
 }

@@ -17,7 +17,7 @@ buildproductionimage:
 
 rundocker: buildlocalimage
 	docker run -it \
-	--env-file .env \
+	--env-file docker.env \
 	--network argent_network \
 	-p 8008:8008 \
 	${DEV_TAG}

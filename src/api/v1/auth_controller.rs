@@ -6,10 +6,11 @@ use crate::{
             cookie::{create_auth_cookie, create_expired_cookie},
             google_verification::AuthenticatedGoogleMail,
         },
-        helpers::{ArgentApiResult, NewData},
+        helpers::{ArgentApiResult, NewData, OkData},
     },
     config::AuthenticationConfig,
     data::users::{models::User, store::UsersStore},
+    error::SimpleMessage,
 };
 
 #[get("/login")]
@@ -26,9 +27,13 @@ async fn login(
 }
 
 #[get("/logout")]
-async fn logout(cookies: &CookieJar<'_>, auth_config: &State<AuthenticationConfig>) {
+async fn logout(
+    cookies: &CookieJar<'_>,
+    auth_config: &State<AuthenticationConfig>,
+) -> ArgentApiResult<SimpleMessage> {
     let auth_cookie = create_expired_cookie(&auth_config);
     cookies.add(auth_cookie);
+    ArgentApiResult::new_ok()
 }
 
 pub fn routes() -> Vec<Route> {

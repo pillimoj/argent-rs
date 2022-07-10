@@ -20,9 +20,10 @@ use crate::{api::v1::ApiV1Routes, data::ArgentDB};
 use api::auth::jwk::Jwks;
 use config::AuthenticationConfig;
 use cors::CORS;
+use data::run_migrations;
 use debugging::load_debug_env;
 use error::SimpleMessage;
-use rocket::{get, launch, routes, serde::json::Json};
+use rocket::{fairing::AdHoc, get, launch, routes, serde::json::Json};
 use rocket_db_pools::Database;
 
 //#[macro_use]
@@ -42,13 +43,14 @@ async fn ping() -> Json<SimpleMessage> {
 async fn rocket() -> _ {
     load_debug_env();
     rocket::build()
+        .attach(ArgentDB::init())
+        .attach(AdHoc::try_on_ignite("Migrate database", run_migrations))
         .manage(
             Jwks::new()
                 .await
                 .expect("Could not start google Jwt verifier"),
         )
         .manage(AuthenticationConfig::from_env())
-        .attach(ArgentDB::init())
         .attach(CORS::init())
         .mount("/api/v1", ApiV1Routes::get())
         .mount("/", routes![ping, health_check])

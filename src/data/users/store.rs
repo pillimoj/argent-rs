@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use rocket::request::FromRequest;
 use rocket_db_pools::Connection;
-use sqlx::{query, query_as};
+use sqlx::{pool::PoolConnection, query, query_as, Postgres};
 use uuid::Uuid;
 
 use crate::data::users::models::User;
@@ -10,7 +10,7 @@ use crate::data::ArgentDB;
 use crate::{api::helpers::ArgentResult, error::ArgentError};
 
 pub struct UsersStore {
-    db: Connection<ArgentDB>,
+    pub(crate) db: Connection<ArgentDB>,
 }
 
 impl UsersStore {
@@ -28,6 +28,24 @@ impl UsersStore {
         .fetch_one(&mut *self.db)
         .await?;
         Ok(user)
+    }
+
+    pub async fn has_user_for_email(
+        conn: &mut PoolConnection<Postgres>,
+        email: &str,
+    ) -> Result<bool, ArgentError> {
+        let user = query(
+            "SELECT
+                    id,
+                    email
+                FROM argent_users
+                WHERE email = $1",
+        )
+        .bind(email)
+        .fetch_optional(&mut *conn)
+        .await
+        .unwrap();
+        Ok(user.is_some())
     }
 
     pub async fn get_user(&mut self, id: Uuid) -> Result<User, ArgentError> {
@@ -60,7 +78,10 @@ impl UsersStore {
         Ok(users)
     }
 
-    pub async fn add_user(&mut self, user: User) -> ArgentResult<()> {
+    pub async fn add_user_conn(
+        conn: &mut PoolConnection<Postgres>,
+        user: User,
+    ) -> ArgentResult<()> {
         query(
             "INSERT INTO argent_users (
             id,
@@ -74,10 +95,14 @@ impl UsersStore {
         .bind(user.name)
         .bind(user.email)
         .bind(user.role)
-        .execute(&mut *self.db)
+        .execute(&mut *conn)
         .await
         .map(|_| ())?;
         Ok(())
+    }
+
+    pub async fn add_user(&mut self, user: User) -> ArgentResult<()> {
+        Self::add_user_conn(&mut *self.db, user).await
     }
 
     pub async fn delete_user(&mut self, user_id: Uuid) -> ArgentResult<()> {

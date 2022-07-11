@@ -1,5 +1,6 @@
 use rocket::{
     http::{hyper::header::AUTHORIZATION, Status},
+    log::private::warn,
     outcome::{try_outcome, IntoOutcome, Outcome},
     request::FromRequest,
     Request,
@@ -53,7 +54,7 @@ impl<'r> FromRequest<'r> for AuthenticatedGoogleMail {
         match jwks.validate_token(token.0).await {
             Ok(verified_email) => Outcome::Success(Self(verified_email)),
             Err(error) => {
-                println!("Could not verify token - {}", error);
+                warn!("Could not verify token - {}", error);
                 Outcome::Failure((Status::Unauthorized, ArgentError::unauthorized()))
             }
         }

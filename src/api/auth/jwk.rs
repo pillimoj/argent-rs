@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use jsonwebtoken::{DecodingKey, Validation};
-use rocket::tokio::sync::RwLock;
+use rocket::{log::private::error, tokio::sync::RwLock};
 use serde::Deserialize;
 
 use crate::error::ArgentError;
@@ -70,7 +70,7 @@ impl Jwks {
             }
             Err(err) => {
                 drop(jwk_map);
-                println!("{}", err);
+                error!("{}", err);
                 Err(ArgentError::server_error())
             }
         }

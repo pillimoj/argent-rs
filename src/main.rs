@@ -21,7 +21,7 @@ use api::auth::jwk::Jwks;
 use config::AuthenticationConfig;
 use cors::CORS;
 use data::run_migrations;
-use debugging::load_debug_env;
+use debugging::{init_dev_admin, load_debug_env};
 use error::SimpleMessage;
 use rocket::{fairing::AdHoc, get, launch, routes, serde::json::Json};
 use rocket_db_pools::Database;
@@ -45,6 +45,10 @@ async fn rocket() -> _ {
     rocket::build()
         .attach(ArgentDB::init())
         .attach(AdHoc::try_on_ignite("Migrate database", run_migrations))
+        .attach(AdHoc::on_ignite(
+            "Debug: init admin account",
+            init_dev_admin,
+        ))
         .manage(
             Jwks::new()
                 .await

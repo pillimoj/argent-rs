@@ -7,6 +7,9 @@ RUN apt update && apt install -y libssl-dev pkg-config
 # create a new empty shell project
 RUN USER=root cargo new --bin argent
 WORKDIR /argent
+# update the cargo registry which can be slow
+RUN echo 'time = "0"' >> Cargo.toml
+RUN cargo update
 
 # copy over your manifests
 COPY ./Cargo.lock ./Cargo.lock

@@ -17,11 +17,7 @@ pub fn create_auth_cookie(config: &AuthenticationConfig, user: &User) -> Cookie<
     )
     .http_only(true)
     .secure(config.secure_cookie)
-    .same_site(if config.secure_cookie {
-        SameSite::None
-    } else {
-        SameSite::Strict
-    })
+    .same_site(SameSite::Strict)
     .path("/api/v1")
     .expires(expiry_date)
     .finish()

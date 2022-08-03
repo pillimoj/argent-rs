@@ -11,6 +11,11 @@ pub mod users {
     pub mod store;
 }
 
+pub mod marble_game {
+    pub mod models;
+    pub mod store;
+}
+
 #[derive(Database)]
 #[database("argent")]
 pub struct ArgentDB(sqlx::PgPool);

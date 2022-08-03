@@ -59,6 +59,7 @@ impl ChecklistItemRequest {
 }
 
 #[derive(Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ChecklistItem {
     pub id: Uuid,
     pub title: String,
@@ -86,6 +87,7 @@ impl ChecklistItem {
 }
 
 #[derive(Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct UserAccess {
     id: Uuid,
     name: String,
@@ -93,6 +95,7 @@ pub struct UserAccess {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShareRequest {
     pub user_id: String,
     pub access_type: AccessType,

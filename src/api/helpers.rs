@@ -55,3 +55,8 @@ impl<T: Serialize> From<T> for Data<T> {
         Data::D(data)
     }
 }
+
+pub fn convert_uuid(rocket_uuid: &rocket::serde::uuid::Uuid) -> Uuid {
+    let bytes: &[u8; 16] = rocket_uuid.as_bytes();
+    Uuid::from_bytes(*bytes)
+}

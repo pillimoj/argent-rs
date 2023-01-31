@@ -30,7 +30,8 @@ impl ChecklistStore {
                         created_at,
                         checklist
                     FROM checklistitems
-                    WHERE checklist = $1",
+                    WHERE checklist = $1
+                    ORDER BY created_at ASC",
         )
         .bind(checklist)
         .fetch_all(&mut *self.db)

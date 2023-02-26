@@ -13,7 +13,7 @@ use crate::{
 async fn get_status(
     user: AuthenticatedUser,
     mut marble_game_store: MarbleGameStore,
-) -> ArgentApiResult<Option<GameStatus>> {
+) -> ArgentApiResult<GameStatus> {
     let status = marble_game_store.get_game_status(user.get()).await?;
     ArgentApiResult::new(status)
 }

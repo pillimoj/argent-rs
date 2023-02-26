@@ -15,7 +15,7 @@ pub struct MarbleGameStore {
 }
 
 impl MarbleGameStore {
-    pub async fn get_game_status(&mut self, user: User) -> Result<Option<GameStatus>, ArgentError> {
+    pub async fn get_game_status(&mut self, user: User) -> Result<GameStatus, ArgentError> {
         let game_status = query_as(
             "SELECT
                     argent_user,
@@ -26,7 +26,10 @@ impl MarbleGameStore {
         .bind(user.id)
         .fetch_optional(&mut *self.db)
         .await?;
-        Ok(game_status)
+        Ok(game_status.unwrap_or(GameStatus {
+            argent_user: user.id,
+            highest_cleared: 0,
+        }))
     }
 
     pub async fn update_highest_cleared(&mut self, user: User) -> ArgentResult<()> {
